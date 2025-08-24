@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -39,4 +43,38 @@ a {
   html {
     color-scheme: dark;
   }
+}
+
+/* Ensure readable input/select text in light & dark */
+input,
+textarea,
+select {
+  color: #111827; /* gray-900 for light mode */
+}
+.dark input,
+.dark textarea,
+.dark select {
+  color: #f3f4f6; /* gray-100 for dark mode */
+}
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280; /* gray-500 */
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #9ca3af; /* gray-400 */
+}
+
+/* Override WebKit autofill styles so text stays visible */
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #111827 !important;
+  transition: background-color 9999s ease-in-out 0s !important;
+  box-shadow: 0 0 0px 1000px transparent inset !important;
+}
+.dark input:-webkit-autofill,
+.dark textarea:-webkit-autofill,
+.dark select:-webkit-autofill {
+  -webkit-text-fill-color: #f3f4f6 !important;
 }
