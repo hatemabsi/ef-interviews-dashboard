@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
+  const supabase = createClientComponentClient();
+
   const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -19,17 +21,16 @@ export default function LoginPage() {
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
-      password: pass,
+      password,
     });
 
     setLoading(false);
-
     if (error) {
       setErr(error.message);
       return;
     }
 
-    // Sync auth cookies for middleware via route handler
+    // Sync cookies for middleware
     const { data: sessionData } = await supabase.auth.getSession();
     try {
       await fetch("/api/auth/callback", {
@@ -40,15 +41,10 @@ export default function LoginPage() {
           session: sessionData.session,
         }),
       });
-    } catch {
-      /* no-op */
-    }
+    } catch {}
 
-    // Respect ?redirect=… (set by middleware)
     const redirect = params.get("redirect");
     router.replace(redirect && redirect !== "/login" ? redirect : "/");
-
-    // Force the app router to re-read cookies (session) and re-run middleware
     router.refresh();
   }
 
@@ -59,7 +55,7 @@ export default function LoginPage() {
           Sign in
         </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Use your Supabase email + password.
+          Use your Supabase Auth email + password.
         </p>
 
         <form onSubmit={onSubmit} className="mt-5 space-y-4">
@@ -74,6 +70,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="block w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="you@example.com"
+              autoComplete="username"
             />
           </div>
           <div>
@@ -83,10 +80,11 @@ export default function LoginPage() {
             <input
               type="password"
               required
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="block w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="••••••••"
+              autoComplete="current-password"
             />
           </div>
 
@@ -104,5 +102,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   );
 }
