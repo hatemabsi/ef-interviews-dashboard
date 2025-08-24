@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/layout/Layout";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -349,7 +349,7 @@ export default function Home() {
         <div className="mt-6 space-y-6">
           {/* Selected idea */}
           <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 sm:p-4">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Selected idea
               </h3>
@@ -405,7 +405,7 @@ export default function Home() {
             </div>
 
             {/* Stats */}
-            <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 sm:p-4">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Interview stats
               </h3>
@@ -446,7 +446,7 @@ export default function Home() {
             </div>
 
             {/* Pain snapshot */}
-            <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+            <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 sm:p-4">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Pain snapshot
               </h3>
@@ -499,7 +499,51 @@ export default function Home() {
                 View all
               </Link>
             </div>
-            <div className="mt-3 overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
+            {/* Mobile cards (smaller than sm) */}
+            <div className="mt-3 sm:hidden space-y-3">
+              {recent5.length === 0 ? (
+                <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-300">
+                  No interviews yet.
+                </div>
+              ) : (
+                recent5.map((iv) => {
+                  const p = peopleById.get(iv.person_id);
+                  const comp = p?.company_id
+                    ? companyById.get(p.company_id)
+                    : undefined;
+                  const ins = insightsByInterviewId.get(iv.id);
+                  return (
+                    <div
+                      key={iv.id}
+                      className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {p?.full_name || "—"}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {comp?.name || "—"} • {p?.role || "—"}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {fmtDateOnly(iv.happened_at)}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-xs capitalize text-gray-600 dark:text-gray-300">
+                            {iv.source || "—"}
+                          </div>
+                          <div className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                            {ins?.pain_score ?? "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="mt-3 hidden sm:block overflow-x-auto rounded-md border border-gray-200 dark:border-gray-800">
               <table className="min-w-full table-fixed divide-y divide-gray-200 dark:divide-gray-800 text-sm">
                 <colgroup>
                   <col style={{ width: "7rem" }} />
@@ -731,20 +775,42 @@ function MiniBars({
     y: number;
     label: string;
   }>(null);
-  const max = Math.max(minDomain, ...values); // <— minimum domain
-  const w = 12 * values.length;
-  const h = 80;
-  const barW = 8;
+  const containerRef = useRef<HTMLDivElement>(null);
+  // measure container width responsively
+  const [cWidth, setCWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(
+      (entries: ReadonlyArray<ResizeObserverEntry>) => {
+        const w = entries[0]?.contentRect?.width ?? 0;
+        setCWidth(w);
+      }
+    );
+    ro.observe(el);
+    setCWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  const max = Math.max(minDomain, ...values);
+  const n = values.length;
+  const h = 100; // a bit taller for labels/tooltip
   const gap = 4;
+  const barW = Math.max(
+    6,
+    Math.floor((Math.max(1, cWidth) - gap * (n - 1)) / Math.max(1, n))
+  );
+  const w = Math.max(0, barW * n + gap * (n - 1));
   const fmt = (l: string, v: number) =>
     formatLabel ? formatLabel(l, v) : `${l}: ${v}`;
+
   return (
-    <div className="mt-2 relative">
-      <svg width={w} height={h} className="block">
+    <div className="mt-2 relative" ref={containerRef}>
+      <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} className="block">
         {values.map((v, i) => {
-          const bh = Math.round((v / max) * (h - 16));
+          const bh = Math.round((v / max) * (h - 22));
           const x = i * (barW + gap);
-          const y = h - bh;
+          const y = h - bh - 16;
           return (
             <Fragment key={i}>
               <rect
@@ -753,9 +819,7 @@ function MiniBars({
                 width={barW}
                 height={bh}
                 className="fill-gray-400 dark:fill-gray-600 cursor-pointer"
-                onMouseLeave={() => {
-                  setTip(null);
-                }}
+                onMouseLeave={() => setTip(null)}
                 onMouseMove={() => {
                   setTip({
                     x: x + barW / 2,
@@ -780,7 +844,6 @@ function MiniBars({
           );
         })}
       </svg>
-      {/* Floating tooltip */}
       {tip && (
         <div
           className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-2 rounded bg-gray-900 px-2 py-1 text-xs text-white shadow dark:bg-black/90"
@@ -791,7 +854,7 @@ function MiniBars({
       )}
       <div className="mt-1 flex justify-between text-[10px] text-gray-500 dark:text-gray-400">
         {labels.map((l, i) => (
-          <span key={i} className="w-12 text-center truncate">
+          <span key={i} className="flex-1 text-center truncate">
             {l}
           </span>
         ))}
@@ -812,34 +875,48 @@ function StackedMiniBars({
     y: number;
     label: string;
   }>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cWidth, setCWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(
+      (entries: ReadonlyArray<ResizeObserverEntry>) => {
+        const w = entries[0]?.contentRect?.width ?? 0;
+        setCWidth(w);
+      }
+    );
+    ro.observe(el);
+    setCWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
   const keys = Object.keys(series);
   const n = labels.length;
   const totals = Array.from({ length: n }, (_, i) =>
     keys.reduce((acc, k) => acc + (series[k]?.[i] || 0), 0)
   );
   const max = Math.max(1, ...totals);
-  const w = 12 * n;
-  const h = 80;
-  const barW = 8;
+  const h = 100;
   const gap = 4;
-  const palette = [
-    "#6366f1", // indigo-500
-    "#22c55e", // green-500
-    "#ef4444", // red-500
-    "#f59e0b", // amber-500
-    "#06b6d4", // cyan-500
-  ];
+  const barW = Math.max(
+    6,
+    Math.floor((Math.max(1, cWidth) - gap * (n - 1)) / Math.max(1, n))
+  );
+  const w = Math.max(0, barW * n + gap * (n - 1));
+  const palette = ["#6366f1", "#22c55e", "#ef4444", "#f59e0b", "#06b6d4"];
+
   return (
-    <div className="mt-2 relative">
-      <svg width={w} height={h} className="block">
+    <div className="mt-2 relative" ref={containerRef}>
+      <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} className="block">
         {labels.map((_, i) => {
-          let y = h;
+          let y = h - 16;
           const x = i * (barW + gap);
           return (
             <Fragment key={i}>
               {keys.map((k, ki) => {
                 const v = series[k]?.[i] || 0;
-                const bh = Math.round((v / max) * (h - 16));
+                const bh = Math.round((v / max) * (h - 22));
                 y -= bh;
                 return (
                   <rect
@@ -850,9 +927,7 @@ function StackedMiniBars({
                     height={Math.max(0, bh)}
                     fill={palette[ki % palette.length]}
                     className="cursor-pointer"
-                    onMouseLeave={() => {
-                      setTip(null);
-                    }}
+                    onMouseLeave={() => setTip(null)}
                     onMouseMove={() => {
                       setTip({
                         x: x + barW / 2,
@@ -869,7 +944,6 @@ function StackedMiniBars({
           );
         })}
       </svg>
-      {/* Floating tooltip */}
       {tip && (
         <div
           className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-2 rounded bg-gray-900 px-2 py-1 text-xs text-white shadow dark:bg-black/90"
@@ -880,7 +954,7 @@ function StackedMiniBars({
       )}
       <div className="mt-1 flex justify-between text-[10px] text-gray-500 dark:text-gray-400">
         {labels.map((l, i) => (
-          <span key={i} className="w-12 text-center truncate">
+          <span key={i} className="flex-1 text-center truncate">
             {l}
           </span>
         ))}

@@ -102,39 +102,59 @@ export default function IdeasTable() {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
-        <thead className="bg-gray-50 dark:bg-gray-800/40 text-gray-700 dark:text-gray-200">
-          <tr>
-            <Th>Name</Th>
-            <Th>Slug</Th>
-            <Th>Status</Th>
-            <Th>Cofounder</Th>
-            <Th>Started</Th>
-            <Th>Ended</Th>
-            <Th className="text-right pr-4">Actions</Th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-          {rows.map((r) => (
-            <tr key={r.id} className="text-gray-800 dark:text-gray-100">
-              <Td>{r.name}</Td>
-              <Td>
-                <code className="rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-xs">
-                  {r.slug}
-                </code>
-              </Td>
-              <Td>
-                <StatusBadge status={r.status} />
-              </Td>
-              <Td>{r.cofounder || <span className="text-gray-400">—</span>}</Td>
-              <Td>{fmtDate(r.started_at)}</Td>
-              <Td>
-                {fmtDate(r.ended_at) || (
-                  <span className="text-gray-400">—</span>
-                )}
-              </Td>
-              <Td className="text-right pr-4">
+    <>
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3 px-1">
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="w-full overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 max-w-full">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                  {r.name}
+                </div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                  <code className="rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] truncate">
+                    {r.slug}
+                  </code>
+                  <StatusBadge status={r.status} />
+                </div>
+                <div className="mt-2 flex justify-between gap-x-8 text-xs text-gray-600 dark:text-gray-300">
+                  <div>
+                    <div className="text-gray-500 dark:text-gray-400">
+                      Started
+                    </div>
+                    <div className="mt-0.5">{fmtDate(r.started_at) || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500 dark:text-gray-400">
+                      Ended
+                    </div>
+                    <div className="mt-0.5">{fmtDate(r.ended_at) || "—"}</div>
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-300">
+                  <div className="col-span-2">
+                    <div className="text-gray-500 dark:text-gray-400">
+                      Cofounder
+                    </div>
+                    <div className="mt-0.5 truncate">{r.cofounder || "—"}</div>
+                  </div>
+                  {r.notes && (
+                    <div className="col-span-2">
+                      <div className="text-gray-500 dark:text-gray-400">
+                        Notes
+                      </div>
+                      <p className="mt-0.5 whitespace-pre-line break-words">
+                        {r.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0">
                 {r.status !== "active" ? (
                   <button
                     onClick={() => makeActive(r.slug)}
@@ -148,12 +168,66 @@ export default function IdeasTable() {
                     Current
                   </span>
                 )}
-              </Td>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden sm:block overflow-x-auto rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-800/40 text-gray-700 dark:text-gray-200">
+            <tr>
+              <Th>Name</Th>
+              <Th>Slug</Th>
+              <Th>Status</Th>
+              <Th>Cofounder</Th>
+              <Th>Started</Th>
+              <Th>Ended</Th>
+              <Th className="text-right pr-4">Actions</Th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+            {rows.map((r) => (
+              <tr key={r.id} className="text-gray-800 dark:text-gray-100">
+                <Td>{r.name}</Td>
+                <Td>
+                  <code className="rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-xs">
+                    {r.slug}
+                  </code>
+                </Td>
+                <Td>
+                  <StatusBadge status={r.status} />
+                </Td>
+                <Td>
+                  {r.cofounder || <span className="text-gray-400">—</span>}
+                </Td>
+                <Td>{fmtDate(r.started_at)}</Td>
+                <Td>
+                  {fmtDate(r.ended_at) || (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </Td>
+                <Td className="text-right pr-4">
+                  {r.status !== "active" ? (
+                    <button
+                      onClick={() => makeActive(r.slug)}
+                      disabled={updatingSlug === r.slug}
+                      className="inline-flex items-center rounded-md px-2.5 py-1.5 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                    >
+                      {updatingSlug === r.slug ? "Activating…" : "Activate"}
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center rounded-md px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs">
+                      Current
+                    </span>
+                  )}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

@@ -363,59 +363,32 @@ export default function InterviewsTable() {
   return (
     <div className="space-y-3">
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-            Source
-          </label>
-          <Listbox value={source} onChange={setSource}>
-            <div className="relative mt-1 w-40">
-              <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 focus:outline-none">
-                <span className="block truncate capitalize">
-                  {source || "All"}
-                </span>
-                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-gray-500 dark:text-gray-400">
-                  <ChevronUpDownIcon className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </Listbox.Button>
-              <Transition
-                as={Fragment}
-                leave="transition ease-in duration-100"
-                leaveFrom="opacity-100"
-                leaveTo="opacity-0"
-              >
-                <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-sm shadow-lg ring-1 ring-black/5 focus:outline-none">
-                  <Listbox.Option
-                    key="__all__"
-                    className={({ active }) =>
-                      `relative cursor-default select-none py-2 pl-8 pr-3 ${
-                        active
-                          ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
-                          : "text-gray-800 dark:text-gray-100"
-                      }`
-                    }
-                    value=""
-                  >
-                    {({ selected }) => (
-                      <>
-                        <span
-                          className={`block truncate ${
-                            selected ? "font-medium" : "font-normal"
-                          }`}
-                        >
-                          All
-                        </span>
-                        {selected ? (
-                          <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
-                            <CheckIcon className="h-4 w-4" aria-hidden="true" />
-                          </span>
-                        ) : null}
-                      </>
-                    )}
-                  </Listbox.Option>
-                  {optionSets.sources.map((opt) => (
+      <div className="pb-1">
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          {/* Source */}
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Source
+            </label>
+            <Listbox value={source} onChange={setSource}>
+              <div className="relative mt-1 w-full sm:w-40">
+                <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 focus:outline-none">
+                  <span className="block truncate capitalize">
+                    {source || "All"}
+                  </span>
+                  <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-gray-500 dark:text-gray-400">
+                    <ChevronUpDownIcon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                </Listbox.Button>
+                <Transition
+                  as={Fragment}
+                  leave="transition ease-in duration-100"
+                  leaveFrom="opacity-100"
+                  leaveTo="opacity-0"
+                >
+                  <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-sm shadow-lg ring-1 ring-black/5 focus:outline-none">
                     <Listbox.Option
-                      key={opt}
+                      key="__all__"
                       className={({ active }) =>
                         `relative cursor-default select-none py-2 pl-8 pr-3 ${
                           active
@@ -423,92 +396,7 @@ export default function InterviewsTable() {
                             : "text-gray-800 dark:text-gray-100"
                         }`
                       }
-                      value={opt}
-                    >
-                      {({ selected }) => (
-                        <>
-                          <span
-                            className={`block truncate capitalize ${
-                              selected ? "font-medium" : "font-normal"
-                            }`}
-                          >
-                            {opt}
-                          </span>
-                          {selected ? (
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
-                              <CheckIcon
-                                className="h-4 w-4"
-                                aria-hidden="true"
-                              />
-                            </span>
-                          ) : null}
-                        </>
-                      )}
-                    </Listbox.Option>
-                  ))}
-                </Listbox.Options>
-              </Transition>
-            </div>
-          </Listbox>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-            Company
-          </label>
-          <Listbox value={qCompany} onChange={setQCompany}>
-            <div className="relative mt-1 w-56">
-              <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 focus:outline-none">
-                <span className="block truncate">{qCompany || "All"}</span>
-                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-gray-500 dark:text-gray-400">
-                  <ChevronUpDownIcon className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </Listbox.Button>
-              <Transition
-                as={Fragment}
-                leave="transition ease-in duration-100"
-                leaveFrom="opacity-100"
-                leaveTo="opacity-0"
-              >
-                <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-sm shadow-lg ring-1 ring-black/5 focus:outline-none">
-                  <Listbox.Option
-                    key="__all__"
-                    className={({ active }) =>
-                      `relative cursor-default select-none py-2 pl-8 pr-3 ${
-                        active
-                          ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
-                          : "text-gray-800 dark:text-gray-100"
-                      }`
-                    }
-                    value=""
-                  >
-                    {({ selected }) => (
-                      <>
-                        <span
-                          className={`block truncate ${
-                            selected ? "font-medium" : "font-normal"
-                          }`}
-                        >
-                          All
-                        </span>
-                        {selected ? (
-                          <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
-                            <CheckIcon className="h-4 w-4" aria-hidden="true" />
-                          </span>
-                        ) : null}
-                      </>
-                    )}
-                  </Listbox.Option>
-                  {optionSets.companies.map((name) => (
-                    <Listbox.Option
-                      key={name}
-                      className={({ active }) =>
-                        `relative cursor-default select-none py-2 pl-8 pr-3 ${
-                          active
-                            ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
-                            : "text-gray-800 dark:text-gray-100"
-                        }`
-                      }
-                      value={name}
+                      value=""
                     >
                       {({ selected }) => (
                         <>
@@ -517,7 +405,7 @@ export default function InterviewsTable() {
                               selected ? "font-medium" : "font-normal"
                             }`}
                           >
-                            {name}
+                            All
                           </span>
                           {selected ? (
                             <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
@@ -530,40 +418,216 @@ export default function InterviewsTable() {
                         </>
                       )}
                     </Listbox.Option>
-                  ))}
-                </Listbox.Options>
-              </Transition>
-            </div>
-          </Listbox>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-            Role
-          </label>
-          <input
-            value={qRole}
-            onChange={(e) => setQRole(e.target.value)}
-            placeholder="Search..."
-            className="mt-1 w-56 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-black dark:text-gray-100 placeholder:text-gray-500 caret-gray-700 px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-            Min. Pain
-          </label>
-          <input
-            type="number"
-            min={0}
-            max={5}
-            value={minPain}
-            onChange={(e) => setMinPain(Number(e.target.value))}
-            className="mt-1 w-20 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-black dark:text-gray-100 px-3 py-2"
-          />
+                    {optionSets.sources.map((opt) => (
+                      <Listbox.Option
+                        key={opt}
+                        className={({ active }) =>
+                          `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                            active
+                              ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                              : "text-gray-800 dark:text-gray-100"
+                          }`
+                        }
+                        value={opt}
+                      >
+                        {({ selected }) => (
+                          <>
+                            <span
+                              className={`block truncate capitalize ${
+                                selected ? "font-medium" : "font-normal"
+                              }`}
+                            >
+                              {opt}
+                            </span>
+                            {selected ? (
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                                <CheckIcon
+                                  className="h-4 w-4"
+                                  aria-hidden="true"
+                                />
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </Listbox.Option>
+                    ))}
+                  </Listbox.Options>
+                </Transition>
+              </div>
+            </Listbox>
+          </div>
+
+          {/* Company */}
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Company
+            </label>
+            <Listbox value={qCompany} onChange={setQCompany}>
+              <div className="relative mt-1 w-full sm:w-56">
+                <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 focus:outline-none">
+                  <span className="block truncate">{qCompany || "All"}</span>
+                  <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-gray-500 dark:text-gray-400">
+                    <ChevronUpDownIcon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                </Listbox.Button>
+                <Transition
+                  as={Fragment}
+                  leave="transition ease-in duration-100"
+                  leaveFrom="opacity-100"
+                  leaveTo="opacity-0"
+                >
+                  <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-gray-800 py-1 text-sm shadow-lg ring-1 ring-black/5 focus:outline-none">
+                    <Listbox.Option
+                      key="__all__"
+                      className={({ active }) =>
+                        `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                          active
+                            ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                            : "text-gray-800 dark:text-gray-100"
+                        }`
+                      }
+                      value=""
+                    >
+                      {({ selected }) => (
+                        <>
+                          <span
+                            className={`block truncate ${
+                              selected ? "font-medium" : "font-normal"
+                            }`}
+                          >
+                            All
+                          </span>
+                          {selected ? (
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                              <CheckIcon
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </Listbox.Option>
+                    {optionSets.companies.map((name) => (
+                      <Listbox.Option
+                        key={name}
+                        className={({ active }) =>
+                          `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                            active
+                              ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                              : "text-gray-800 dark:text-gray-100"
+                          }`
+                        }
+                        value={name}
+                      >
+                        {({ selected }) => (
+                          <>
+                            <span
+                              className={`block truncate ${
+                                selected ? "font-medium" : "font-normal"
+                              }`}
+                            >
+                              {name}
+                            </span>
+                            {selected ? (
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                                <CheckIcon
+                                  className="h-4 w-4"
+                                  aria-hidden="true"
+                                />
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </Listbox.Option>
+                    ))}
+                  </Listbox.Options>
+                </Transition>
+              </div>
+            </Listbox>
+          </div>
+
+          {/* Role */}
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Role
+            </label>
+            <input
+              value={qRole}
+              onChange={(e) => setQRole(e.target.value)}
+              placeholder="Search..."
+              className="mt-1 w-full sm:w-56 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-black dark:text-gray-100 placeholder:text-gray-500 caret-gray-700 px-3 py-2"
+            />
+          </div>
+
+          {/* Min Pain */}
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Min. Pain
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={5}
+              value={minPain}
+              onChange={(e) => setMinPain(Number(e.target.value))}
+              className="mt-1 w-full sm:w-20 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-black dark:text-gray-100 px-3 py-2"
+            />
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+      {/* Mobile cards (smaller than sm) */}
+      <div className="sm:hidden space-y-3">
+        {rows.length === 0 ? (
+          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-300">
+            No interviews yet.
+          </div>
+        ) : (
+          rows.map((r) => {
+            const insight = insightByInterviewId.get(r.id);
+            const isOpen = openId === r.id;
+            return (
+              <div
+                key={r.id}
+                className="w-full overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3"
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenId(isOpen ? null : r.id)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 max-w-full">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {r.personName}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {r.company} • {r.role}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right text-xs text-gray-500 dark:text-gray-400 max-w-[40%]">
+                      <div>{fmtDateShort(r.date)}</div>
+                      <div className="capitalize">{r.source}</div>
+                    </div>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="mt-3">
+                    <DetailsPanel
+                      insight={insight}
+                      transcript={r.transcript}
+                      date={r.date}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+      <div className="hidden sm:block overflow-x-auto rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         <table className="min-w-full table-fixed divide-y divide-gray-200 dark:divide-gray-800 text-sm">
           <colgroup>
             {[

@@ -150,10 +150,31 @@ export default function Header() {
   return (
     <header className="h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
+        {/* Mobile menu button */}
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              window.dispatchEvent(new CustomEvent("sidebar:open"));
+            } catch {}
+          }}
+          className="sm:hidden inline-flex items-center justify-center rounded-md p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          aria-label="Open menu"
+        >
+          {/* Bars icon */}
+          <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true">
+            <path
+              d="M3 6h18M3 12h18M3 18h18"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
         <h1 className="text-sm font-medium text-gray-800 dark:text-gray-100">
           Idea:
         </h1>
-        <div className="ml-2 w-64">
+        <div className="ml-2 w-60">
           <Listbox
             value={selectedSlug}
             onChange={(slug) => setSelectedSlug(slug)}
@@ -265,7 +286,7 @@ export default function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="hidden sm:flex items-center gap-2">
         {userEmail && (
           <span className="hidden sm:inline text-xs text-gray-600 dark:text-gray-300 mr-1">
             {userEmail}

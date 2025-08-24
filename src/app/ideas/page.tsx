@@ -7,7 +7,7 @@ export default function IdeasPage() {
       <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
         Ideas
       </h2>
-      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+      <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 break-words hyphens-auto max-w-full">
         Manage your ideas. Start a new one, pause an existing one, and review
         cofounders.
       </p>
