@@ -53,7 +53,7 @@ export default function Sidebar() {
       <aside
         className={`${
           collapsed ? "w-16" : "w-64"
-        } hidden sm:flex h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col ${
+        } hidden sm:flex h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex-col ${
           hydrated ? "transition-all" : ""
         }`}
       >

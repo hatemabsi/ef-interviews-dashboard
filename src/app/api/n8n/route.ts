@@ -26,6 +26,7 @@ export async function POST(request: Request) {
   const ingestPath = process.env.N8N_INGEST_PATH || "";
   const startIdeaPath = process.env.N8N_START_IDEA_PATH || "";
   const updatePath = process.env.N8N_UPDATE_IDEA_PATH || "";
+  const transcribePath = process.env.N8N_TRANSCRIBE_PATH || "";
 
   let path = "";
   switch (target) {
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
       break;
     case "update-status":
       path = updatePath;
+      break;
+    case "transcribe":
+      path = transcribePath;
       break;
     default:
       return NextResponse.json({ error: "Unknown target" }, { status: 400 });

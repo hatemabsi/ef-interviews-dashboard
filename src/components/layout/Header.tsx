@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabaseClient";
 export default function Header() {
   const [showUpload, setShowUpload] = useState(false);
   const [showNewIdea, setShowNewIdea] = useState(false);
+  const [showTranscribe, setShowTranscribe] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [ideas, setIdeas] = useState<
     {
@@ -305,18 +306,24 @@ export default function Header() {
         >
           {darkMode ? "☀️" : "🌙"}
         </button>
-        {/* These buttons will later open modals */}
+        {/* These buttons open modals */}
         <button
           onClick={() => setShowUpload(true)}
           className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
         >
-          Upload meeting
+          Upload Meeting
         </button>
         <button
           onClick={() => setShowNewIdea(true)}
           className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
         >
-          Start new idea
+          Start Idea
+        </button>
+        <button
+          onClick={() => setShowTranscribe(true)}
+          className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+        >
+          Transcribe Audio
         </button>
       </div>
       {showUpload && (
@@ -606,6 +613,89 @@ export default function Header() {
                   className="rounded-md px-3 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
                 >
                   Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {showTranscribe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowTranscribe(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Transcribe audio
+              </h2>
+              <button
+                onClick={() => setShowTranscribe(false)}
+                className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              className="space-y-3"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget as HTMLFormElement;
+                const fd = new FormData(form);
+                const TRANSCRIBE_URL = "/api/n8n?target=transcribe";
+                try {
+                  const res = await fetch(TRANSCRIBE_URL, {
+                    method: "POST",
+                    body: fd,
+                  });
+                  if (!res.ok) {
+                    const txt = await res.text().catch(() => "");
+                    alert("Transcription failed: " + res.status + " " + txt);
+                    return;
+                  }
+                  const data: Record<string, unknown> = await res
+                    .json()
+                    .catch(() => ({} as Record<string, unknown>));
+                  alert(
+                    "Transcription requested. Job: " +
+                      (data?.job_id || data?.id || "OK")
+                  );
+                  setShowTranscribe(false);
+                  form.reset();
+                } catch (err) {
+                  alert(
+                    "Network error: " + ((err as Error)?.message || String(err))
+                  );
+                }
+              }}
+            >
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Audio file (MP3/WAV/M4A)
+                </label>
+                <input
+                  name="audio"
+                  type="file"
+                  required
+                  accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac"
+                  className="mt-1 block w-full text-sm text-gray-900 dark:text-gray-100 file:mr-4 file:rounded-md file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700 dark:hover:file:bg-emerald-500"
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTranscribe(false)}
+                  className="rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md px-3 py-2 text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 dark:hover:bg-emerald-500"
+                >
+                  Submit
                 </button>
               </div>
             </form>
