@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import {
   HomeIcon,
   ChatBubbleLeftRightIcon,
   LightBulbIcon,
+  ArrowLeftOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 
 const nav = [
@@ -20,6 +22,8 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [hydrated, setHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   useEffect(() => {
     const onOpen = () => setMobileOpen(true);
     const onClose = () => setMobileOpen(false);
@@ -48,6 +52,34 @@ export default function Sidebar() {
     } catch {}
   }, [collapsed, hydrated]);
 
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (active) setUserEmail(data.user?.email ?? null);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      try {
+        localStorage.removeItem("idea_slug");
+        localStorage.removeItem("sidebar_collapsed");
+        localStorage.removeItem("theme");
+      } catch {}
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout failed", e);
+    } finally {
+      setLoggingOut(false);
+      // hard redirect so middleware reevaluates and we start clean
+      window.location.href = "/login";
+    }
+  }
   return (
     <>
       <aside
@@ -125,8 +157,65 @@ export default function Sidebar() {
           </ul>
         </nav>
 
-        <div className="p-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800">
-          v0.1 • Tailwind + Next.js
+        <div className="py-3 px-2 border-t border-gray-200 dark:border-gray-800">
+          {!collapsed && userEmail && (
+            <div
+              className="mb-2 text-[11px] text-gray-600 dark:text-gray-300 truncate"
+              title={userEmail}
+            >
+              {userEmail}
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            aria-label="Logout"
+            className={`${
+              collapsed ? "w-12 h-10" : "w-full px-2.5 py-1.5"
+            } inline-flex items-center justify-center rounded-md text-xs font-medium ${
+              loggingOut
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800 dark:text-gray-300"
+                : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+            }`}
+          >
+            {collapsed ? (
+              loggingOut ? (
+                // simple spinner for collapsed state
+                <svg
+                  className="h-5 w-5 animate-spin"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                  />
+                </svg>
+              ) : (
+                <ArrowLeftOnRectangleIcon
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                />
+              )
+            ) : loggingOut ? (
+              "Logging out…"
+            ) : (
+              "Logout"
+            )}
+          </button>
+          <div className="mt-2 text-[10px] text-gray-500 dark:text-gray-400 text-center">
+            v1.1
+          </div>
         </div>
       </aside>
 
@@ -186,6 +275,27 @@ export default function Sidebar() {
               })}
             </ul>
           </nav>
+          <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+            {userEmail && (
+              <div
+                className="mb-2 text-[11px] text-gray-600 dark:text-gray-300 truncate"
+                title={userEmail}
+              >
+                {userEmail}
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className={`w-full inline-flex items-center justify-center rounded-md px-2.5 py-1.5 text-xs font-medium ${
+                loggingOut
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed  dark:bg-gray-800 dark:text-gray-300"
+                  : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              {loggingOut ? "Logging out…" : "Logout"}
+            </button>
+          </div>
         </div>
       </div>
     </>

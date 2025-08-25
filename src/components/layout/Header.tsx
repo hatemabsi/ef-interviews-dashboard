@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Fragment, useMemo } from "react";
 import { Listbox, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronUpDownIcon } from "@heroicons/react/24/solid";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function Header() {
@@ -13,7 +12,6 @@ export default function Header() {
   const [showTranscribe, setShowTranscribe] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [transcribing, setTranscribing] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [ideas, setIdeas] = useState<
     {
       id: number;
@@ -32,37 +30,6 @@ export default function Header() {
     }
   });
   const [mounted, setMounted] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (active) setUserEmail(data.user?.email ?? null);
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-  const router = useRouter();
-
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      // Clear any client-only preferences
-      try {
-        localStorage.removeItem("idea_slug");
-        localStorage.removeItem("sidebar_collapsed");
-        localStorage.removeItem("theme");
-      } catch {}
-      // Call server route to clear auth cookies
-      await fetch("/api/auth/signout", { method: "POST" });
-    } catch (e) {
-      console.error("Logout failed", e);
-    } finally {
-      setLoggingOut(false);
-      router.replace("/login");
-    }
-  }
 
   // Extracted loadIdeas function for reuse
   const loadIdeas = useCallback(async () => {
@@ -299,22 +266,6 @@ export default function Header() {
       </div>
 
       <div className="hidden sm:flex items-center gap-2">
-        {userEmail && (
-          <span className="hidden sm:inline text-xs text-gray-600 dark:text-gray-300 mr-1">
-            {userEmail}
-          </span>
-        )}
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className={`inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-medium ${
-            loggingOut
-              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-          }`}
-        >
-          {loggingOut ? "Signing out…" : "Logout"}
-        </button>
         <button
           className="px-3 py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
           onClick={() => setDarkMode((v) => !(v ?? false))}
