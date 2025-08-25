@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState, Fragment } from "react";
 import { Listbox, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronUpDownIcon } from "@heroicons/react/20/solid";
 import { supabase } from "@/lib/supabaseClient";
+import useStartup from "@/hooks/useStartup";
 
 // Minimal row types per table
 type Interview = {
@@ -50,6 +51,7 @@ export default function InterviewsTable() {
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [insights, setInsights] = useState<Insight[]>([]);
 
+  const { startupId } = useStartup();
   // Filters
   const [ideaSlug, setIdeaSlug] = useState<string>("");
   // Sync ideaSlug filter with header selection via localStorage and custom event
@@ -83,24 +85,78 @@ export default function InterviewsTable() {
       setLoading(true);
       setError(null);
 
-      // Load base tables in parallel
+      // Block until we know startup; if not available, show empty for now
+      if (!startupId) {
+        setInterviews([]);
+        setPeople([]);
+        setCompanies([]);
+        setIdeas([]);
+        setInsights([]);
+        setLoading(false);
+        return;
+      }
+
+      // 1) Which ideas belong to this startup?
+      const idsRes = await supabase
+        .from("idea_startups")
+        .select("idea_id")
+        .eq("startup_id", startupId);
+
+      if (idsRes.error) {
+        if (!mounted) return;
+        setError(idsRes.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const ideaIds = (idsRes.data || []).map((r) => r.idea_id as number);
+
+      if (ideaIds.length === 0) {
+        if (!mounted) return;
+        // No ideas yet for this startup
+        setInterviews([]);
+        setPeople([]);
+        setCompanies([]);
+        setIdeas([]);
+        setInsights([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2) Load base tables filtered by idea_ids
       const [ivRes, pplRes, compRes, ideaRes, insRes] = await Promise.all([
         supabase
           .from("interviews")
           .select(
             "id,person_id,idea_id,source,happened_at,duration_seconds,transcript_text"
           )
+          .in("idea_id", ideaIds)
           .order("happened_at", { ascending: false })
           .returns<Interview[]>(),
         supabase
           .from("people")
           .select("id,full_name,role,company_id,idea_id")
+          .in("idea_id", ideaIds)
           .returns<Person[]>(),
         supabase.from("companies").select("id,name").returns<Company[]>(),
-        supabase.from("ideas").select("id,name,slug").returns<Idea[]>(),
+        supabase
+          .from("ideas")
+          .select("id,name,slug")
+          .in("id", ideaIds)
+          .returns<Idea[]>(),
         supabase
           .from("interview_insights")
           .select("interview_id,pain_score,themes,summary")
+          // Filter insights by interviews under these ideas
+          .in(
+            "interview_id",
+            (
+              await supabase
+                .from("interviews")
+                .select("id")
+                .in("idea_id", ideaIds)
+            ).data?.map((r) => r.id) || [-1]
+          )
           .returns<Insight[]>(),
       ]);
 
@@ -123,12 +179,69 @@ export default function InterviewsTable() {
       setCompanies(compRes.data || []);
       setIdeas(ideaRes.data || []);
       setInsights(insRes.data || []);
+
+      // --- Backfill any missing people/companies referenced by these interviews ---
+      try {
+        // People present from initial load
+        const havePeople = new Set((pplRes.data || []).map((p) => p.id));
+        const missingPersonIds = new Set<number>();
+        for (const iv of ivRes.data || []) {
+          if (!havePeople.has(iv.person_id)) missingPersonIds.add(iv.person_id);
+        }
+
+        let fetchedPeople: Person[] = [];
+        if (missingPersonIds.size) {
+          const miss = Array.from(missingPersonIds);
+          const resp = await supabase
+            .from("people")
+            .select("id,full_name,role,company_id,idea_id")
+            .in("id", miss)
+            .returns<Person[]>();
+          if (!resp.error && resp.data) {
+            fetchedPeople = resp.data;
+            setPeople((prev) => {
+              const byId = new Map(prev.map((p) => [p.id, p]));
+              for (const p of resp.data!) byId.set(p.id, p);
+              return Array.from(byId.values());
+            });
+          }
+        }
+
+        // Companies present from initial load
+        const haveCompanies = new Set((compRes.data || []).map((c) => c.id));
+        const missingCompanyIds = new Set<number>();
+        const combinedPeople = [...(pplRes.data || []), ...fetchedPeople];
+        for (const p of combinedPeople) {
+          if (p.company_id != null && !haveCompanies.has(p.company_id)) {
+            missingCompanyIds.add(p.company_id);
+          }
+        }
+
+        if (missingCompanyIds.size) {
+          const respC = await supabase
+            .from("companies")
+            .select("id,name")
+            .in("id", Array.from(missingCompanyIds))
+            .returns<Company[]>();
+          if (!respC.error && respC.data) {
+            setCompanies((prev) => {
+              const byId = new Map(prev.map((c) => [c.id, c]));
+              for (const c of respC.data!) byId.set(c.id, c);
+              return Array.from(byId.values());
+            });
+          }
+        }
+      } catch (e) {
+        // Non-fatal; keep rendering with whatever we have
+        console.warn("Backfill skipped", e);
+      }
+
       setLoading(false);
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [startupId]);
 
   // Build quick maps
   const peopleById = useMemo(() => indexBy(people, (p) => p.id), [people]);

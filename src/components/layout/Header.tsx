@@ -5,6 +5,10 @@ import { Fragment, useMemo } from "react";
 import { Listbox, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronUpDownIcon } from "@heroicons/react/24/solid";
 import { supabase } from "@/lib/supabaseClient";
+import useStartup from "@/hooks/useStartup";
+import type { IdeaLite } from "@/lib/types";
+
+type CofounderOption = { user_id: string; email: string };
 
 export default function Header() {
   const [showUpload, setShowUpload] = useState(false);
@@ -12,15 +16,10 @@ export default function Header() {
   const [showTranscribe, setShowTranscribe] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [transcribing, setTranscribing] = useState(false);
-  const [ideas, setIdeas] = useState<
-    {
-      id: number;
-      name: string;
-      slug: string;
-      status: string;
-      cofounder?: string | null;
-    }[]
-  >([]);
+  const [ideas, setIdeas] = useState<IdeaLite[]>([]);
+  const [cofounders, setCofounders] = useState<CofounderOption[]>([]);
+  const [cofounderId, setCofounderId] = useState<string>("");
+  const { startupId, email: loggedEmail } = useStartup();
   const [selectedSlug, setSelectedSlug] = useState<string>(() => {
     try {
       const v = localStorage.getItem("idea_slug");
@@ -31,24 +30,76 @@ export default function Header() {
   });
   const [mounted, setMounted] = useState(false);
 
-  // Extracted loadIdeas function for reuse
+  // Upload Meeting modal state
+  const [uploadIdeaSlug, setUploadIdeaSlug] = useState<string>("");
+  const [uploadSource, setUploadSource] = useState<
+    "zoom" | "meet" | "teams" | "manual"
+  >("zoom");
+
+  // Load only ideas connected to the current startup via ideas_startups
   const loadIdeas = useCallback(async () => {
+    if (!startupId) {
+      setIdeas([]);
+      return;
+    }
+
+    // 1) Get idea ids for this startup
+    const { data: links, error: linkErr } = await supabase
+      .from("idea_startups")
+      .select("idea_id")
+      .eq("startup_id", startupId);
+
+    if (linkErr) {
+      setIdeas([]);
+      return;
+    }
+
+    const ideaIds = (links ?? []).map((l) => l.idea_id as number);
+    if (ideaIds.length === 0) {
+      setIdeas([]);
+      return;
+    }
+
+    // 2) Fetch the idea rows themselves
     const { data, error } = await supabase
       .from("ideas")
       .select("id,name,slug,status,cofounder")
+      .in("id", ideaIds)
       .order("started_at", { ascending: false });
+
     if (!error && data) {
-      setIdeas(data);
-      // Only correct the selection if it's non-empty and no longer exists
-      if (
-        selectedSlug !== "" &&
-        !data.some((idea) => idea.slug === selectedSlug)
-      ) {
-        const activeIdea = data.find((idea) => idea.status === "active");
+      setIdeas(data as IdeaLite[]);
+      // Keep selection sane if current slug vanished
+      if (selectedSlug !== "" && !data.some((i) => i.slug === selectedSlug)) {
+        const activeIdea = data.find((i) => i.status === "active");
         setSelectedSlug(activeIdea ? activeIdea.slug : data[0]?.slug ?? "");
       }
+    } else {
+      setIdeas([]);
     }
-  }, [selectedSlug]);
+  }, [startupId, selectedSlug]);
+
+  const loadCofounders = useCallback(async () => {
+    // Do nothing until we know who is logged in
+    // and only fetch when the modal is shown (hooked in a useEffect below).
+    try {
+      const q = supabase.from("profiles").select("user_id,email");
+      // Exclude self if we know the email
+      if (loggedEmail) q.neq("email", loggedEmail);
+      const { data, error } = await q.order("email", { ascending: true });
+      if (!error && data) {
+        setCofounders(
+          (data as { user_id: string; email: string }[]).filter(
+            (r) => !!r.user_id && !!r.email
+          )
+        );
+      } else {
+        setCofounders([]);
+      }
+    } catch {
+      setCofounders([]);
+    }
+  }, [loggedEmail]);
 
   const selectedIdea = useMemo(
     () => ideas.find((i) => i.slug === selectedSlug) || null,
@@ -114,6 +165,21 @@ export default function Header() {
   useEffect(() => {
     void loadIdeas();
   }, [loadIdeas]);
+
+  useEffect(() => {
+    if (showNewIdea) {
+      setCofounderId("");
+      void loadCofounders();
+    }
+  }, [showNewIdea, loadCofounders]);
+
+  useEffect(() => {
+    if (showUpload) {
+      // Default to the currently selected idea if available; otherwise force empty so the user must pick
+      setUploadIdeaSlug(selectedIdea ? selectedIdea.slug : "");
+      setUploadSource("zoom");
+    }
+  }, [showUpload, selectedIdea]);
 
   useEffect(() => {
     try {
@@ -288,7 +354,7 @@ export default function Header() {
         </button>
         <button
           onClick={() => setShowTranscribe(true)}
-          className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          className="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 dark:hover:bg-emerald-500 text-white"
         >
           Transcribe Audio
         </button>
@@ -316,10 +382,22 @@ export default function Header() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 const form = e.currentTarget as HTMLFormElement;
+
+                // Hard stop if no idea chosen
+                if (!uploadIdeaSlug) {
+                  alert(
+                    "Please select an idea first (start an idea if you don’t have one)."
+                  );
+                  return;
+                }
+
                 const fd = new FormData(form);
-                // If idea_slug not set by user, fall back to selectedSlug
-                if (!fd.get("idea_slug"))
-                  fd.set("idea_slug", selectedSlug || "");
+                if (startupId) fd.set("startup_id", startupId);
+
+                // Inject the Listbox-chosen values
+                fd.set("idea_slug", uploadIdeaSlug);
+                fd.set("source", uploadSource);
+
                 const INGEST_URL = "/api/n8n?target=ingest";
                 try {
                   const res = await fetch(INGEST_URL, {
@@ -382,33 +460,163 @@ export default function Header() {
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                     Idea
                   </label>
-                  <select
-                    name="idea_slug"
-                    defaultValue={selectedSlug}
-                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-black dark:text-gray-100 px-3 py-2 text-sm"
-                  >
-                    {ideas.map((i) => (
-                      <option key={i.id} value={i.slug}>
-                        {i.name} {i.status === "active" ? "🟢" : "🔴"}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="mt-1">
+                    <Listbox
+                      value={uploadIdeaSlug}
+                      onChange={setUploadIdeaSlug}
+                    >
+                      <div className="relative">
+                        <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 py-1.5 pl-3 pr-10 text-left text-sm text-gray-800 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <span className="block truncate">
+                            {uploadIdeaSlug
+                              ? ideas.find((i) => i.slug === uploadIdeaSlug)
+                                  ?.name ?? "Select idea"
+                              : ideas.length
+                              ? "Select idea"
+                              : "No ideas — start one first"}
+                          </span>
+                          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                            <ChevronUpDownIcon
+                              className="h-4 w-4 text-gray-400"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </Listbox.Button>
+                        <Transition
+                          as={Fragment}
+                          leave="transition ease-in duration-100"
+                          leaveFrom="opacity-100"
+                          leaveTo="opacity-0"
+                        >
+                          <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-1 text-sm shadow-lg focus:outline-none">
+                            {ideas.map((idea) => (
+                              <Listbox.Option
+                                key={idea.id}
+                                value={idea.slug}
+                                className={({ active }) =>
+                                  `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                                    active
+                                      ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                                      : "text-gray-800 dark:text-gray-100"
+                                  }`
+                                }
+                              >
+                                {({ selected }) => (
+                                  <>
+                                    <span
+                                      className={`block truncate ${
+                                        selected ? "font-medium" : "font-normal"
+                                      }`}
+                                    >
+                                      {idea.name}
+                                      <span
+                                        className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                          idea.status === "active"
+                                            ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                                            : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                                        }`}
+                                      >
+                                        {idea.status === "active"
+                                          ? "active"
+                                          : "paused"}
+                                      </span>
+                                    </span>
+                                    {selected ? (
+                                      <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                                        <CheckIcon
+                                          className="h-4 w-4"
+                                          aria-hidden="true"
+                                        />
+                                      </span>
+                                    ) : null}
+                                  </>
+                                )}
+                              </Listbox.Option>
+                            ))}
+                            {ideas.length === 0 && (
+                              <div className="px-3 py-2 text-gray-500 dark:text-gray-400">
+                                No ideas yet — start one first.
+                              </div>
+                            )}
+                          </Listbox.Options>
+                        </Transition>
+                      </div>
+                    </Listbox>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                     Source
                   </label>
-                  <select
-                    name="source"
-                    required
-                    defaultValue="zoom"
-                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-black dark:text-gray-100 px-3 py-2 text-sm"
-                  >
-                    <option value="zoom">Zoom</option>
-                    <option value="meet">Google Meet</option>
-                    <option value="teams">MS Teams</option>
-                    <option value="manual">Manual</option>
-                  </select>
+                  <div className="mt-1">
+                    <Listbox value={uploadSource} onChange={setUploadSource}>
+                      <div className="relative">
+                        <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 py-1.5 pl-3 pr-10 text-left text-sm text-gray-800 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <span className="block truncate">
+                            {uploadSource === "zoom" && "Zoom"}
+                            {uploadSource === "meet" && "Google Meet"}
+                            {uploadSource === "teams" && "MS Teams"}
+                            {uploadSource === "manual" && "Manual"}
+                          </span>
+                          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                            <ChevronUpDownIcon
+                              className="h-4 w-4 text-gray-400"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </Listbox.Button>
+                        <Transition
+                          as={Fragment}
+                          leave="transition ease-in duration-100"
+                          leaveFrom="opacity-100"
+                          leaveTo="opacity-0"
+                        >
+                          <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-1 text-sm shadow-lg focus:outline-none">
+                            {[
+                              { v: "zoom", label: "Zoom" },
+                              { v: "meet", label: "Google Meet" },
+                              { v: "teams", label: "MS Teams" },
+                              { v: "manual", label: "Manual" },
+                            ].map((opt) => (
+                              <Listbox.Option
+                                key={opt.v}
+                                value={
+                                  opt.v as "zoom" | "meet" | "teams" | "manual"
+                                }
+                                className={({ active }) =>
+                                  `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                                    active
+                                      ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                                      : "text-gray-800 dark:text-gray-100"
+                                  }`
+                                }
+                              >
+                                {({ selected }) => (
+                                  <>
+                                    <span
+                                      className={`block truncate ${
+                                        selected ? "font-medium" : "font-normal"
+                                      }`}
+                                    >
+                                      {opt.label}
+                                    </span>
+                                    {selected ? (
+                                      <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                                        <CheckIcon
+                                          className="h-4 w-4"
+                                          aria-hidden="true"
+                                        />
+                                      </span>
+                                    ) : null}
+                                  </>
+                                )}
+                              </Listbox.Option>
+                            ))}
+                          </Listbox.Options>
+                        </Transition>
+                      </div>
+                    </Listbox>
+                  </div>
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -421,6 +629,12 @@ export default function Header() {
                     accept=".txt,.vtt,.srt"
                     className="mt-1 block w-full text-sm text-gray-900 dark:text-gray-100 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-indigo-700 dark:hover:file:bg-indigo-500"
                   />
+                  {ideas.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      You don’t have any ideas yet. Start an idea first to
+                      attach this meeting.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-end gap-2">
@@ -433,7 +647,17 @@ export default function Header() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md px-3 py-2 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
+                  disabled={!uploadIdeaSlug || ideas.length === 0}
+                  title={
+                    !uploadIdeaSlug || ideas.length === 0
+                      ? "Select or start an idea first"
+                      : undefined
+                  }
+                  className={`rounded-md px-3 py-2 text-sm font-medium text-white ${
+                    !uploadIdeaSlug || ideas.length === 0
+                      ? "bg-indigo-400 cursor-not-allowed opacity-70"
+                      : "bg-indigo-600 hover:bg-indigo-700 dark:hover:bg-indigo-500"
+                  }`}
                 >
                   Upload
                 </button>
@@ -466,11 +690,21 @@ export default function Header() {
                 e.preventDefault();
                 const form = e.currentTarget as HTMLFormElement;
                 const fd = new FormData(form);
+                const selectedCofounderId = cofounderId || "";
+                const cofounder_email =
+                  cofounders.find((c) => c.user_id === selectedCofounderId)
+                    ?.email ?? null;
+
                 const payload = {
                   name: String(fd.get("name") || ""),
                   slug: String(fd.get("slug") || ""),
                   notes: String(fd.get("notes") || ""),
-                  cofounder: String(fd.get("cofounder") || ""),
+                  // keep legacy key blank to avoid breaking older n8n flows
+                  cofounder: "",
+                  cofounder_user_id: selectedCofounderId || null,
+                  cofounder_email,
+                  startup_id: startupId ?? null,
+                  creator_email: loggedEmail ?? null,
                 };
                 if (!payload.name || !payload.slug) {
                   alert("Name and slug are required.");
@@ -560,11 +794,103 @@ export default function Header() {
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                     Cofounder
                   </label>
-                  <input
-                    name="cofounder"
-                    placeholder="(optional)"
-                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-black dark:text-gray-100 placeholder:text-gray-500 caret-gray-700 px-3 py-2 text-sm"
-                  />
+                  <div className="mt-1">
+                    <Listbox value={cofounderId} onChange={setCofounderId}>
+                      <div className="relative">
+                        <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 py-1.5 pl-3 pr-10 text-left text-sm text-gray-800 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <span className="block truncate">
+                            {cofounderId
+                              ? cofounders.find(
+                                  (c) => c.user_id === cofounderId
+                                )?.email ?? "Select cofounder"
+                              : "— None —"}
+                          </span>
+                          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                            <ChevronUpDownIcon
+                              className="h-4 w-4 text-gray-400"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </Listbox.Button>
+                        <Transition
+                          as={Fragment}
+                          leave="transition ease-in duration-100"
+                          leaveFrom="opacity-100"
+                          leaveTo="opacity-0"
+                        >
+                          <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-1 text-sm shadow-lg focus:outline-none">
+                            <Listbox.Option
+                              key="__none__"
+                              value=""
+                              className={({ active }) =>
+                                `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                                  active
+                                    ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                                    : "text-gray-800 dark:text-gray-100"
+                                }`
+                              }
+                            >
+                              {({ selected }) => (
+                                <>
+                                  <span
+                                    className={`block truncate ${
+                                      selected ? "font-medium" : "font-normal"
+                                    }`}
+                                  >
+                                    — None —
+                                  </span>
+                                  {selected ? (
+                                    <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                                      <CheckIcon
+                                        className="h-4 w-4"
+                                        aria-hidden="true"
+                                      />
+                                    </span>
+                                  ) : null}
+                                </>
+                              )}
+                            </Listbox.Option>
+                            {cofounders.map((c) => (
+                              <Listbox.Option
+                                key={c.user_id}
+                                value={c.user_id}
+                                className={({ active }) =>
+                                  `relative cursor-default select-none py-2 pl-8 pr-3 ${
+                                    active
+                                      ? "bg-gray-100 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100"
+                                      : "text-gray-800 dark:text-gray-100"
+                                  }`
+                                }
+                              >
+                                {({ selected }) => (
+                                  <>
+                                    <span
+                                      className={`block truncate ${
+                                        selected ? "font-medium" : "font-normal"
+                                      }`}
+                                    >
+                                      {c.email}
+                                    </span>
+                                    {selected ? (
+                                      <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-indigo-600 dark:text-indigo-400">
+                                        <CheckIcon
+                                          className="h-4 w-4"
+                                          aria-hidden="true"
+                                        />
+                                      </span>
+                                    ) : null}
+                                  </>
+                                )}
+                              </Listbox.Option>
+                            ))}
+                          </Listbox.Options>
+                        </Transition>
+                      </div>
+                    </Listbox>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Optional. Select another user (excluding yourself).
+                  </p>
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-end gap-2">

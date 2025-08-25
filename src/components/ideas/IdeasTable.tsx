@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import useStartup from "@/hooks/useStartup";
 
 type IdeaRow = {
   id: number;
@@ -12,6 +13,9 @@ type IdeaRow = {
   started_at: string | null;
   ended_at: string | null;
   notes?: string | null;
+
+  // Computed: emails of cofounders excluding the current user (joined with ", ")
+  cofounder_display?: string | null;
 };
 
 export default function IdeasTable() {
@@ -21,6 +25,8 @@ export default function IdeasTable() {
 
   const [updatingSlug, setUpdatingSlug] = useState<string | null>(null);
   const [refreshFlag, setRefreshFlag] = useState(0);
+
+  const { startupId, email: myEmail } = useStartup();
 
   async function reload() {
     setRefreshFlag((n) => n + 1);
@@ -44,27 +50,125 @@ export default function IdeasTable() {
     }
   }
 
+  async function makePause(slug: string) {
+    setUpdatingSlug(slug);
+    try {
+      const res = await fetch("/api/n8n?target=update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, status: "paused" }),
+      });
+      if (!res.ok) {
+        alert(`Failed to update: ${res.status} ${res.statusText}`);
+        return;
+      }
+      await reload();
+    } finally {
+      setUpdatingSlug(null);
+    }
+  }
+
   useEffect(() => {
     let mounted = true;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("ideas")
-        .select("id,name,slug,status,cofounder,started_at,ended_at,notes")
-        .order("started_at", { ascending: false })
-        .returns<IdeaRow[]>();
+      setError(null);
+
+      // Wait until we know which startup we are
+      if (!startupId) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      // 1) Which ideas belong to this startup?
+      const idsRes = await supabase
+        .from("idea_startups")
+        .select("idea_id")
+        .eq("startup_id", startupId);
+
+      if (idsRes.error) {
+        if (!mounted) return;
+        setError(idsRes.error.message);
+        setLoading(false);
+        return;
+      }
+
+      const ideaIds = (idsRes.data || []).map((r) => r.idea_id as number);
+      if (ideaIds.length === 0) {
+        if (!mounted) return;
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2) Load ideas for these ids
+      const [{ data: ideasData, error: ideasError }, linkRes, profRes] =
+        await Promise.all([
+          supabase
+            .from("ideas")
+            .select("id,name,slug,status,cofounder,started_at,ended_at,notes")
+            .in("id", ideaIds)
+            .order("started_at", { ascending: false })
+            .returns<IdeaRow[]>(),
+          supabase.from("idea_startups").select("idea_id,startup_id"),
+          supabase.from("profiles").select("startup_id,email"),
+        ]);
+
       if (!mounted) return;
-      if (error) {
-        setError(error.message);
-      } else if (data) {
-        const sorted = [...data].sort((a, b) => {
+
+      if (ideasError) {
+        setError(ideasError.message);
+      } else if (ideasData) {
+        // Map startup_id -> emails
+        const emailsByStartup = new Map<string, string[]>();
+        if (!linkRes.error && !profRes.error) {
+          const profRows = (profRes.data || []) as Array<{
+            startup_id: string;
+            email: string | null;
+          }>;
+          for (const p of profRows) {
+            if (!p.startup_id) continue;
+            const arr = emailsByStartup.get(p.startup_id) || [];
+            if (p.email) arr.push(p.email);
+            emailsByStartup.set(p.startup_id, arr);
+          }
+        }
+
+        // idea_id -> all emails (via startups)
+        const emailsByIdea = new Map<number, string[]>();
+        if (!linkRes.error) {
+          const linkRows = (linkRes.data || []) as Array<{
+            idea_id: number;
+            startup_id: string;
+          }>;
+          for (const l of linkRows) {
+            const prev = emailsByIdea.get(l.idea_id) || [];
+            const startupEmails = emailsByStartup.get(l.startup_id) || [];
+            emailsByIdea.set(l.idea_id, prev.concat(startupEmails));
+          }
+        }
+
+        // Compute "other founders" display (exclude current user email)
+        const enriched = ideasData.map((i) => {
+          const all = (emailsByIdea.get(i.id) || []).filter(Boolean);
+          const uniq = Array.from(new Set(all));
+          const others = myEmail
+            ? uniq.filter((e) => e.toLowerCase() !== myEmail.toLowerCase())
+            : uniq;
+          return {
+            ...i,
+            cofounder_display: others.length ? others.join(", ") : null,
+          };
+        });
+
+        const sorted = [...enriched].sort((a, b) => {
           const aActive = (a.status || "").toLowerCase() === "active";
           const bActive = (b.status || "").toLowerCase() === "active";
           if (aActive && !bActive) return -1;
           if (bActive && !aActive) return 1;
           const aEnd = a.ended_at ? new Date(a.ended_at).getTime() : 0;
           const bEnd = b.ended_at ? new Date(b.ended_at).getTime() : 0;
-          // Descending by ended_at (most recently ended first)
           return bEnd - aEnd;
         });
         setRows(sorted);
@@ -74,7 +178,7 @@ export default function IdeasTable() {
     return () => {
       mounted = false;
     };
-  }, [refreshFlag]);
+  }, [refreshFlag, startupId, myEmail]);
 
   if (loading) {
     return (
@@ -140,7 +244,9 @@ export default function IdeasTable() {
                     <div className="text-gray-500 dark:text-gray-400">
                       Cofounder
                     </div>
-                    <div className="mt-0.5 truncate">{r.cofounder || "—"}</div>
+                    <div className="mt-0.5 truncate">
+                      {r.cofounder_display || r.cofounder || "—"}
+                    </div>
                   </div>
                   {r.notes && (
                     <div className="col-span-2">
@@ -155,7 +261,15 @@ export default function IdeasTable() {
                 </div>
               </div>
               <div className="shrink-0">
-                {r.status !== "active" ? (
+                {r.status === "active" ? (
+                  <button
+                    onClick={() => makePause(r.slug)}
+                    disabled={updatingSlug === r.slug}
+                    className="inline-flex items-center rounded-md px-2.5 py-1.5 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                  >
+                    {updatingSlug === r.slug ? "Pausing…" : "Pause"}
+                  </button>
+                ) : (
                   <button
                     onClick={() => makeActive(r.slug)}
                     disabled={updatingSlug === r.slug}
@@ -163,10 +277,6 @@ export default function IdeasTable() {
                   >
                     {updatingSlug === r.slug ? "Activating…" : "Activate"}
                   </button>
-                ) : (
-                  <span className="inline-flex items-center rounded-md px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs">
-                    Current
-                  </span>
                 )}
               </div>
             </div>
@@ -199,7 +309,9 @@ export default function IdeasTable() {
                   <StatusBadge status={r.status} />
                 </Td>
                 <Td>
-                  {r.cofounder || <span className="text-gray-400">—</span>}
+                  {r.cofounder_display || r.cofounder || (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </Td>
                 <Td>{fmtDate(r.started_at)}</Td>
                 <Td>
@@ -208,7 +320,15 @@ export default function IdeasTable() {
                   )}
                 </Td>
                 <Td className="text-right pr-4">
-                  {r.status !== "active" ? (
+                  {r.status === "active" ? (
+                    <button
+                      onClick={() => makePause(r.slug)}
+                      disabled={updatingSlug === r.slug}
+                      className="inline-flex items-center rounded-md px-2.5 py-1.5 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                    >
+                      {updatingSlug === r.slug ? "Pausing…" : "Pause"}
+                    </button>
+                  ) : (
                     <button
                       onClick={() => makeActive(r.slug)}
                       disabled={updatingSlug === r.slug}
@@ -216,10 +336,6 @@ export default function IdeasTable() {
                     >
                       {updatingSlug === r.slug ? "Activating…" : "Activate"}
                     </button>
-                  ) : (
-                    <span className="inline-flex items-center rounded-md px-2.5 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs">
-                      Current
-                    </span>
                   )}
                 </Td>
               </tr>

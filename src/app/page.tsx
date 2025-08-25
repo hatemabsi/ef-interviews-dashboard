@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/layout/Layout";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+import useStartup from "@/hooks/useStartup";
 
 // --- Minimal table types ---
 interface Idea {
@@ -38,6 +39,16 @@ interface Company {
   id: number;
   name: string;
 }
+type IdeaJoined = {
+  id: number;
+  name: string;
+  slug: string;
+  status: string;
+  cofounder: string | null;
+  notes: string | null;
+  // because of `idea_startups!inner(startup_id)` the join comes back as an array
+  idea_startups: { startup_id: string }[];
+};
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
@@ -50,17 +61,39 @@ export default function Home() {
   const [people, setPeople] = useState<Person[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
 
-  // Effect A: load ideas & wire selectedSlug from header/localStorage
+  // multi-tenant: current user's startup
+  const { startupId } = useStartup();
+  // Effect A: load ideas for this startup & wire selectedSlug from header/localStorage
   useEffect(() => {
     let mounted = true;
+    if (!startupId) {
+      // Clear ideas until we know the tenant
+      setIdeas([]);
+      return;
+    }
     (async () => {
       const { data, error } = await supabase
         .from("ideas")
-        .select("id,name,slug,status,cofounder,notes")
-        .order("started_at", { ascending: false })
-        .returns<Idea[]>();
+        .select(
+          "id,name,slug,status,cofounder,notes,idea_startups!inner(startup_id)"
+        )
+        .eq("idea_startups.startup_id", startupId)
+        .order("started_at", { ascending: false });
       if (!mounted) return;
-      if (!error && data) setIdeas(data);
+      if (!error && data) {
+        // Strip join field
+        const cleaned: Idea[] = (data as IdeaJoined[]).map((i) => ({
+          id: i.id,
+          name: i.name,
+          slug: i.slug,
+          status: i.status,
+          cofounder: i.cofounder ?? null,
+          notes: i.notes ?? null,
+        }));
+        setIdeas(cleaned);
+      } else if (error) {
+        setIdeas([]);
+      }
       try {
         const stored = localStorage.getItem("idea_slug");
         if (stored !== null) setSelectedSlug(stored);
@@ -76,32 +109,46 @@ export default function Home() {
       mounted = false;
       window.removeEventListener("idea:change", onIdeaChange as EventListener);
     };
-  }, []);
+  }, [startupId]);
 
-  // Effect B: load recent data used by dashboard widgets
+  // Effect B: load recent data used by dashboard widgets (scoped to this startup's ideas)
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    const run = async () => {
+      if (!startupId) {
+        setInterviews([]);
+        setInsights([]);
+        setPeople([]);
+        setCompanies([]);
+        return;
+      }
       setLoading(true);
       setError(null);
       const since = new Date();
       since.setDate(since.getDate() - 90);
+      // compute allowed idea ids for tenant
+      const allowedIdeaIds = ideas.map((i) => i.id);
+      if (allowedIdeaIds.length === 0) {
+        if (!mounted) return;
+        setInterviews([]);
+        setInsights([]);
+        setPeople([]);
+        setCompanies([]);
+        setLoading(false);
+        return;
+      }
       const [ivRes, insRes, pplRes, compRes] = await Promise.all([
         supabase
           .from("interviews")
           .select("id,person_id,idea_id,source,happened_at,duration_seconds")
           .gte("happened_at", since.toISOString())
-          .order("happened_at", { ascending: false })
-          .returns<Interview[]>(),
+          .in("idea_id", allowedIdeaIds)
+          .order("happened_at", { ascending: false }),
         supabase
           .from("interview_insights")
-          .select("interview_id,pain_score,themes,summary")
-          .returns<Insight[]>(),
-        supabase
-          .from("people")
-          .select("id,full_name,role,company_id")
-          .returns<Person[]>(),
-        supabase.from("companies").select("id,name").returns<Company[]>(),
+          .select("interview_id,pain_score,themes,summary"),
+        supabase.from("people").select("id,full_name,role,company_id"),
+        supabase.from("companies").select("id,name"),
       ]);
       if (!mounted) return;
       const firstErr =
@@ -116,11 +163,12 @@ export default function Home() {
       setPeople(pplRes.data || []);
       setCompanies(compRes.data || []);
       setLoading(false);
-    })();
+    };
+    run();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [startupId, ideas]);
 
   // Index helpers
   const insightsByInterviewId = useMemo(
@@ -134,7 +182,7 @@ export default function Home() {
   );
 
   const selectedIdea = useMemo(() => {
-    if (!selectedSlug) return null; // All ideas
+    if (!selectedSlug) return null; // All ideas for this startup
     return ideas.find((i) => i.slug === selectedSlug) || null;
   }, [ideas, selectedSlug]);
 
@@ -792,6 +840,16 @@ function MiniBars({
     return () => ro.disconnect();
   }, []);
 
+  // Check for no data: all values are zero or length is zero
+  const noData = !values.length || values.every((v) => v === 0);
+  if (noData) {
+    return (
+      <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        No data available
+      </div>
+    );
+  }
+
   const max = Math.max(minDomain, ...values);
   const n = values.length;
   const h = 100; // a bit taller for labels/tooltip
@@ -891,8 +949,21 @@ function StackedMiniBars({
     return () => ro.disconnect();
   }, []);
 
+  // Compute data presence *after* hooks so hooks are never conditional
   const keys = Object.keys(series);
   const n = labels.length;
+  const allZero =
+    n === 0 ||
+    keys.length === 0 ||
+    labels.every((_, i) => keys.every((k) => (series[k]?.[i] || 0) === 0));
+  if (n === 0 || allZero) {
+    return (
+      <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        No data available
+      </div>
+    );
+  }
+
   const totals = Array.from({ length: n }, (_, i) =>
     keys.reduce((acc, k) => acc + (series[k]?.[i] || 0), 0)
   );
