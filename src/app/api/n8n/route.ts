@@ -1,6 +1,8 @@
 // src/app/api/n8n/route.ts
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 function basicHeader() {
   const u = process.env.N8N_BASIC_USER || "";
   const p = process.env.N8N_BASIC_PASS || process.env.N8N_BASIC_PASSWORD || "";
@@ -71,24 +73,63 @@ export async function POST(request: Request) {
     });
   }
 
-  // Multipart / other: stream through
-  // Convert Web ReadableStream to Node stream for compatibility with undici if needed,
-  // but here we can just forward the web stream directly.
+  // Multipart: rebuild FormData to preserve filename & content-type for File parts
+  if (contentType.startsWith("multipart/form-data")) {
+    const inForm = await request.formData();
+    const outForm = new FormData();
+
+    for (const [key, val] of inForm.entries()) {
+      if (val instanceof File) {
+        // Ensure filename is preserved; fall back to a sensible default
+        const fname = val.name && val.name !== "blob" ? val.name : "upload.bin";
+        outForm.append(key, val, fname);
+      } else {
+        outForm.append(key, String(val));
+      }
+    }
+
+    const resp = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        authorization: authHeader,
+        // IMPORTANT: do not set Content-Type; fetch will add correct multipart boundary
+      },
+      body: outForm,
+    });
+
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const headers = new Headers();
+    const ct = resp.headers.get("content-type") || "application/octet-stream";
+    headers.set("content-type", ct);
+    // Pass through filename for downloads if present
+    const cd = resp.headers.get("content-disposition");
+    if (cd) headers.set("content-disposition", cd);
+
+    return new Response(buf, { status: resp.status, headers });
+  }
+
+  // Other non-JSON bodies: stream through without forcing content-type
   const init: RequestInit & { duplex?: "half" } = {
     method: "POST",
     headers: {
       authorization: authHeader,
-      // do NOT set content-type; boundary is preserved by runtime
     },
-    body: request.body, // web stream
+    body: request.body ?? null,
     duplex: "half",
   };
 
   const resp = await fetch(upstreamUrl, init);
   const buf = Buffer.from(await resp.arrayBuffer());
-  const ct = resp.headers.get("content-type") || "application/octet-stream";
+  const headers = new Headers();
+  headers.set(
+    "content-type",
+    resp.headers.get("content-type") || "application/octet-stream"
+  );
+  const cd = resp.headers.get("content-disposition");
+  if (cd) headers.set("content-disposition", cd);
+
   return new Response(buf, {
     status: resp.status,
-    headers: { "content-type": ct },
+    headers,
   });
 }

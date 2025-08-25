@@ -12,6 +12,7 @@ export default function Header() {
   const [showNewIdea, setShowNewIdea] = useState(false);
   const [showTranscribe, setShowTranscribe] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
   const [ideas, setIdeas] = useState<
     {
       id: number;
@@ -646,28 +647,50 @@ export default function Header() {
                 const fd = new FormData(form);
                 const TRANSCRIBE_URL = "/api/n8n?target=transcribe";
                 try {
+                  setTranscribing(true);
                   const res = await fetch(TRANSCRIBE_URL, {
                     method: "POST",
                     body: fd,
                   });
+
                   if (!res.ok) {
                     const txt = await res.text().catch(() => "");
-                    alert("Transcription failed: " + res.status + " " + txt);
+                    alert(
+                      "Transcription failed: " +
+                        res.status +
+                        (txt ? " — " + txt : "")
+                    );
                     return;
                   }
-                  const data: Record<string, unknown> = await res
-                    .json()
-                    .catch(() => ({} as Record<string, unknown>));
-                  alert(
-                    "Transcription requested. Job: " +
-                      (data?.job_id || data?.id || "OK")
-                  );
+
+                  // We expect a file (text/plain) from n8n -> download it
+                  const blob = await res.blob();
+
+                  // Try to use filename from Content-Disposition; fallback to default
+                  const cd = res.headers.get("content-disposition") || "";
+                  let filename = "transcript.txt";
+                  const m =
+                    /filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i.exec(cd);
+                  if (m)
+                    filename = decodeURIComponent(m[1] || m[2] || filename);
+
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+
                   setShowTranscribe(false);
                   form.reset();
                 } catch (err) {
                   alert(
                     "Network error: " + ((err as Error)?.message || String(err))
                   );
+                } finally {
+                  setTranscribing(false);
                 }
               }}
             >
@@ -681,21 +704,58 @@ export default function Header() {
                   required
                   accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac"
                   className="mt-1 block w-full text-sm text-gray-900 dark:text-gray-100 file:mr-4 file:rounded-md file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-emerald-700 dark:hover:file:bg-emerald-500"
+                  disabled={transcribing}
                 />
               </div>
               <div className="mt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
+                  disabled={transcribing}
                   onClick={() => setShowTranscribe(false)}
-                  className="rounded-md px-3 py-2 text-sm bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                  className={`rounded-md px-3 py-2 text-sm ${
+                    transcribing
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                  }`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md px-3 py-2 text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 dark:hover:bg-emerald-500"
+                  disabled={transcribing}
+                  aria-busy={transcribing}
+                  className={`rounded-md px-3 py-2 text-sm font-medium text-white ${
+                    transcribing
+                      ? "bg-emerald-600 opacity-70 cursor-not-allowed"
+                      : "bg-emerald-600 hover:bg-emerald-700 dark:hover:bg-emerald-500"
+                  }`}
                 >
-                  Submit
+                  {transcribing ? (
+                    <span className="inline-flex items-center gap-2">
+                      <svg
+                        className="h-4 w-4 animate-spin"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                        ></path>
+                      </svg>
+                      Transcribing…
+                    </span>
+                  ) : (
+                    "Submit"
+                  )}
                 </button>
               </div>
             </form>
