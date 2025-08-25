@@ -13,6 +13,7 @@ export default function Header() {
   const [showTranscribe, setShowTranscribe] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [ideas, setIdeas] = useState<
     {
       id: number;
@@ -45,13 +46,22 @@ export default function Header() {
   const router = useRouter();
 
   async function handleLogout() {
+    setLoggingOut(true);
     try {
-      localStorage.removeItem("idea_slug");
-      localStorage.removeItem("sidebar_collapsed");
-      localStorage.removeItem("theme");
-    } catch {}
-    await supabase.auth.signOut();
-    router.replace("/login");
+      // Clear any client-only preferences
+      try {
+        localStorage.removeItem("idea_slug");
+        localStorage.removeItem("sidebar_collapsed");
+        localStorage.removeItem("theme");
+      } catch {}
+      // Call server route to clear auth cookies
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout failed", e);
+    } finally {
+      setLoggingOut(false);
+      router.replace("/login");
+    }
   }
 
   // Extracted loadIdeas function for reuse
@@ -296,9 +306,14 @@ export default function Header() {
         )}
         <button
           onClick={handleLogout}
-          className="inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          disabled={loggingOut}
+          className={`inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-medium ${
+            loggingOut
+              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          }`}
         >
-          Logout
+          {loggingOut ? "Signing out…" : "Logout"}
         </button>
         <button
           className="px-3 py-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"

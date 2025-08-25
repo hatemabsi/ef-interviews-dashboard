@@ -2,12 +2,11 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient";
 
 function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const supabase = createClientComponentClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

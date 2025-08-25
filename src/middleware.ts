@@ -1,41 +1,59 @@
 // src/middleware.ts
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  // Always create a response we can mutate cookies on
+  const res = NextResponse.next({
+    request: { headers: req.headers },
+  });
 
-  // Allow assets and the login page
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.startsWith("/assets") ||
-    pathname === "/login" ||
-    pathname.startsWith("/api/health") ||
-    pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/n8n")
-  ) {
-    return NextResponse.next();
-  }
-
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      // match your callback route
+      cookieEncoding: "base64url",
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          res.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          res.cookies.set({ name, value: "", ...options, maxAge: 0 });
+        },
+      },
+    }
+  );
 
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // If not logged in, go to /login
-  if (!session) {
+  const { pathname } = req.nextUrl;
+
+  // allowlisted paths
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/assets") ||
+    pathname.startsWith("/api/health") ||
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/n8n")
+  ) {
+    return res;
+  }
+
+  // gate /login and everything else by session
+  if (!session && pathname !== "/login") {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    // Optional: keep where we were trying to go
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
   }
 
-  // If logged in and visiting /login, bounce to home
   if (session && pathname === "/login") {
     const url = req.nextUrl.clone();
     url.pathname = "/";
@@ -46,6 +64,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Protect everything except the whitelisted paths above
   matcher: ["/((?!_next|favicon.ico|assets|api/health).*)"],
 };
